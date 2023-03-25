@@ -7,7 +7,7 @@ use anyhow::{anyhow, Context, Error, Result};
 use pulldown_cmark::{CowStr, Event};
 use quote::quote;
 use syn::{
-    parse::{discouraged::Speculative, Parse},
+    parse::{discouraged::Speculative, Parse, ParseStream},
     Expr, Item, Stmt,
 };
 
@@ -25,10 +25,10 @@ pub enum TopLevel {
     Expr(Expr),
 }
 
-impl<'a> TryFrom<Vec<Event<'a>>> for Code {
+impl<'a> TryFrom<&Vec<Event<'a>>> for Code {
     type Error = Error;
 
-    fn try_from(events: Vec<Event<'a>>) -> Result<Self> {
+    fn try_from(events: &Vec<Event<'a>>) -> Result<Self> {
         let code_ev = events
             .get(1)
             .context("can't find code event in: {events:?}")?;
@@ -39,34 +39,59 @@ impl<'a> TryFrom<Vec<Event<'a>>> for Code {
     }
 }
 
+fn try_parse<T: Parse>(input: &ParseStream) -> syn::Result<T> {
+    let fork = input.fork();
+    let result = fork.parse::<T>();
+    if let Ok(_) = result {
+        input.advance_to(&fork);
+    }
+    result
+}
+
 impl Parse for Code {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut code = Code::default();
         while !input.is_empty() {
-            {
-                let fork = input.fork();
-                if let Ok(item) = fork.parse::<Item>() {
-                    code.items.push(item);
-                    input.advance_to(&fork);
+            println!("try Item");
+            match try_parse::<Item>(&input) {
+                Ok(parsed) => {
+                    println!("parsed as Item");
+                    code.items.push(parsed);
                     continue;
                 }
-            }
-            {
-                let fork = input.fork();
-                if let Ok(stmt) = fork.parse::<Stmt>() {
-                    code.top_levels.push(TopLevel::Stmt(stmt));
-                    input.advance_to(&fork);
-                    continue;
+                Err(err) => {
+                    println!("{err:?}");
                 }
             }
-            {
-                let fork = input.fork();
-                if let Ok(expr) = fork.parse::<Expr>() {
-                    code.top_levels.push(TopLevel::Expr(expr));
-                    input.advance_to(&fork);
+
+            println!("try Stmt");
+            match try_parse::<Stmt>(&input) {
+                Ok(parsed) => {
+                    println!("parsed as stmt");
+                    code.top_levels.push(TopLevel::Stmt(parsed));
                     continue;
                 }
+                Err(err) => {
+                    println!("{err:?}");
+                }
             }
+
+            println!("try Expr");
+            match try_parse::<Expr>(&input) {
+                Ok(parsed) => {
+                    println!("parsed as expr");
+                    code.top_levels.push(TopLevel::Expr(parsed));
+                    continue;
+                }
+                Err(err) => {
+                    println!("{err:?}");
+                }
+            }
+
+            // TODO
+            println!("oh no can't parse");
+            println!("{input:?}");
+            panic!();
         }
         Ok(code)
     }
@@ -120,11 +145,82 @@ impl Display for File {
 
         let main = quote! {
             fn main() {
-                println!("{:#?}", eval_context())
+                print!("{:#?}", eval_context())
             }
         };
         writeln!(f, "{main}")?;
 
+        Ok(())
+    }
+}
+
+pub mod eval {
+    use std::{
+        collections::hash_map::DefaultHasher,
+        env, fs,
+        hash::{Hash, Hasher},
+        path::Path,
+        process::Command,
+    };
+
+    use anyhow::{Context, Result};
+
+    use crate::notebook::{Cell, Notebook};
+
+    use super::{Code, File};
+
+    fn with_scratch_dir<T>(file: &File, f: impl Fn(&Path, &str) -> Result<T>) -> Result<T> {
+        let source = file.to_string();
+
+        let mut hasher = DefaultHasher::new();
+        source.hash(&mut hasher);
+        let dir = env::temp_dir()
+            .join("rust-markdown-notebook-scratch")
+            .join(hasher.finish().to_string());
+
+        fs::create_dir_all(&dir).context(format!("create: {dir:?}"))?;
+        let res = f(&dir, &source);
+        fs::remove_dir_all(&dir).context(format!("remove: {dir:?}"))?;
+
+        res
+    }
+
+    pub fn eval_all_cells(notebook: &Notebook) -> Result<()> {
+        let mut file = File(Vec::<Code>::new());
+        for cell in &notebook.cells {
+            match cell {
+                Cell::RustCode(events) => {
+                    let code = Code::try_from(events).unwrap();
+                    file.push(code);
+                    with_scratch_dir(&file, |dir, source| {
+                        println!("--------");
+                        println!("scratch dir: {dir:?}");
+                        println!("{}", &source);
+
+                        // TODO: use user provided Cargo.toml - generate one for now
+                        fs::write(
+                            dir.join("Cargo.toml"),
+                            "[package]\nname = \"tmp\"\nversion = \"0.1.0\"",
+                        )?;
+                        let src_dir = dir.join("src");
+                        fs::create_dir(&src_dir).or_else(|_| anyhow::Ok(()))?;
+                        fs::write(src_dir.join("main.rs"), source).context("can't write")?;
+
+                        let output = Command::new("cargo")
+                            .arg("run")
+                            .current_dir(&dir)
+                            .output()?
+                            .stdout;
+
+                        println!("=> {:#?}", std::str::from_utf8(&output)?);
+                        println!("--------");
+
+                        Ok(())
+                    })?
+                }
+                _ => {}
+            }
+        }
         Ok(())
     }
 }

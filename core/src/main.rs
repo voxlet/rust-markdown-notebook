@@ -1,9 +1,3 @@
-use std::{
-    collections::hash_map::DefaultHasher,
-    env, fs,
-    hash::{Hash, Hasher},
-};
-
 use notebook::Notebook;
 use pulldown_cmark::{Options, Parser};
 
@@ -49,10 +43,47 @@ b + c
 
 ```rust
 43
+
+// comment
 ```
 
 ```rust
 a + b + c + some_fn()
+```
+
+## Complicated Stuff
+
+```rust
+#[derive(Default, Debug)]
+struct Thing {
+    x: i32,
+    y: i32,
+}
+
+fn inc_x_mut(mut thing: &mut Thing) {
+    thing.x = thing.x + 1;
+}
+
+fn inc_x(thing: &Thing) -> Thing {
+    Thing {
+        x: thing.x + 1,
+        y: thing.y,
+    }
+}
+```
+
+
+```rust
+let t = Thing::default();
+inc_x(t)
+```
+
+```rust
+let t = Thing::default();
+for i in 1..10 {
+    inc_x_mut(t);
+}
+t
 ```
 
 ---
@@ -64,26 +95,5 @@ we're done
     let parser = Parser::new_ext(markdown_input, Options::all());
 
     let notebook: Notebook = parser.collect();
-    let mut file = kernel::File(Vec::<kernel::Code>::new());
-    for cell in notebook.cells {
-        match cell {
-            notebook::Cell::RustCode(events) => {
-                let code = kernel::Code::try_from(events).unwrap();
-                file.push(code);
-                let source = file.to_string();
-                println!("{}", &source);
-
-                let dir = env::temp_dir();
-                let mut hasher = DefaultHasher::new();
-                source.hash(&mut hasher);
-                let filename = hasher.finish();
-
-                let path = dir.join(filename.to_string());
-                println!("writing to {path:?}");
-                fs::write(path, source).unwrap();
-                println!("--------");
-            }
-            _ => {}
-        }
-    }
+    kernel::eval::eval_all_cells(&notebook).unwrap();
 }
