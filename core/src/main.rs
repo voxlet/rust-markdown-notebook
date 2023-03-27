@@ -1,5 +1,4 @@
 use notebook::Notebook;
-use pulldown_cmark::{Options, Parser};
 
 mod kernel;
 mod notebook;
@@ -24,7 +23,6 @@ let a = 1;
 ```
 
 ## Do Stuff
-
 
 ```rust
 let b = 2;
@@ -75,13 +73,13 @@ fn inc_x(thing: &Thing) -> Thing {
 
 ```rust
 let t = Thing::default();
-inc_x(t)
+inc_x(&t)
 ```
 
 ```rust
-let t = Thing::default();
-for i in 1..10 {
-    inc_x_mut(t);
+let mut t = Thing::default();
+for i in 0..10 {
+    inc_x_mut(&mut t);
 }
 t
 ```
@@ -92,8 +90,8 @@ we're done
 
 "#;
 
-    let parser = Parser::new_ext(markdown_input, Options::all());
-
-    let notebook: Notebook = parser.collect();
-    kernel::eval::eval_all_cells(&notebook).unwrap();
+    let mut notebook = Notebook::from(markdown_input);
+    kernel::eval::eval_all_cells(&mut notebook).unwrap();
+    let output = String::try_from(&notebook).unwrap();
+    println!("{}", &output);
 }

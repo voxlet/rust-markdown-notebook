@@ -3,7 +3,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use anyhow::{anyhow, Context, Error, Result};
+use anyhow::{anyhow, Context, Result};
 use pulldown_cmark::{CowStr, Event};
 use quote::quote;
 use syn::{
@@ -26,9 +26,10 @@ pub enum TopLevel {
 }
 
 impl<'a> TryFrom<&Vec<Event<'a>>> for Code {
-    type Error = Error;
+    type Error = anyhow::Error;
 
     fn try_from(events: &Vec<Event<'a>>) -> Result<Self> {
+        // TODO: make source code extraction more robust - assume it's in the 2nd event for now
         let code_ev = events
             .get(1)
             .context("can't find code event in: {events:?}")?;
@@ -52,39 +53,39 @@ impl Parse for Code {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut code = Code::default();
         while !input.is_empty() {
-            println!("try Item");
+            // println!("try Item");
             match try_parse::<Item>(&input) {
                 Ok(parsed) => {
                     println!("parsed as Item");
                     code.items.push(parsed);
                     continue;
                 }
-                Err(err) => {
-                    println!("{err:?}");
+                Err(_err) => {
+                    // println!("{err:?}");
                 }
             }
 
-            println!("try Stmt");
+            // println!("try Stmt");
             match try_parse::<Stmt>(&input) {
                 Ok(parsed) => {
                     println!("parsed as stmt");
                     code.top_levels.push(TopLevel::Stmt(parsed));
                     continue;
                 }
-                Err(err) => {
-                    println!("{err:?}");
+                Err(_err) => {
+                    // println!("{err:?}");
                 }
             }
 
-            println!("try Expr");
+            // println!("try Expr");
             match try_parse::<Expr>(&input) {
                 Ok(parsed) => {
                     println!("parsed as expr");
                     code.top_levels.push(TopLevel::Expr(parsed));
                     continue;
                 }
-                Err(err) => {
-                    println!("{err:?}");
+                Err(_err) => {
+                    // println!("{err:?}");
                 }
             }
 
@@ -160,12 +161,12 @@ pub mod eval {
         env, fs,
         hash::{Hash, Hasher},
         path::Path,
-        process::Command,
+        process::{self, Command},
     };
 
-    use anyhow::{Context, Result};
+    use anyhow::{anyhow, Context, Result};
 
-    use crate::notebook::{Cell, Notebook};
+    use crate::notebook::{Cell, EvaluatedRustCode, Notebook};
 
     use super::{Code, File};
 
@@ -185,38 +186,49 @@ pub mod eval {
         res
     }
 
-    pub fn eval_all_cells(notebook: &Notebook) -> Result<()> {
+    pub fn eval_file(file: &File) -> Result<process::Output> {
+        with_scratch_dir(&file, |dir, source| {
+            if file.len() == 0 {
+                return Err(anyhow!("empty file"));
+            }
+
+            println!("--------");
+            println!("scratch dir: {dir:?}");
+            println!("{}", &source);
+
+            // TODO: use user provided Cargo.toml - generate one for now
+            fs::write(
+                dir.join("Cargo.toml"),
+                "[package]\nname = \"tmp\"\nversion = \"0.1.0\"",
+            )?;
+            let src_dir = dir.join("src");
+            fs::create_dir(&src_dir).or_else(|_| anyhow::Ok(()))?;
+            fs::write(src_dir.join("main.rs"), source).context("can't write")?;
+
+            let output = Command::new("cargo")
+                .arg("run")
+                .current_dir(&dir)
+                .output()?;
+
+            println!("stderr {:#?}", std::str::from_utf8(&output.stderr));
+            println!("");
+            println!("=> {:#?}", std::str::from_utf8(&output.stdout)?);
+            println!("--------");
+
+            Ok(output)
+        })
+    }
+
+    pub fn eval_all_cells(notebook: &mut Notebook) -> Result<()> {
         let mut file = File(Vec::<Code>::new());
-        for cell in &notebook.cells {
+        for cell in notebook.cells.iter_mut() {
             match cell {
-                Cell::RustCode(events) => {
-                    let code = Code::try_from(events).unwrap();
+                Cell::RustCode(evs) => {
+                    let events = evs.clone();
+                    let code = Code::try_from(&events)?;
                     file.push(code);
-                    with_scratch_dir(&file, |dir, source| {
-                        println!("--------");
-                        println!("scratch dir: {dir:?}");
-                        println!("{}", &source);
-
-                        // TODO: use user provided Cargo.toml - generate one for now
-                        fs::write(
-                            dir.join("Cargo.toml"),
-                            "[package]\nname = \"tmp\"\nversion = \"0.1.0\"",
-                        )?;
-                        let src_dir = dir.join("src");
-                        fs::create_dir(&src_dir).or_else(|_| anyhow::Ok(()))?;
-                        fs::write(src_dir.join("main.rs"), source).context("can't write")?;
-
-                        let output = Command::new("cargo")
-                            .arg("run")
-                            .current_dir(&dir)
-                            .output()?
-                            .stdout;
-
-                        println!("=> {:#?}", std::str::from_utf8(&output)?);
-                        println!("--------");
-
-                        Ok(())
-                    })?
+                    let output = eval_file(&file);
+                    *cell = Cell::EvaluatedRustCode(EvaluatedRustCode { events, output });
                 }
                 _ => {}
             }

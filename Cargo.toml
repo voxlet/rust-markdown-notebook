@@ -4,6 +4,6 @@ members = ["core"]
 [workspace.dependencies]
 anyhow = "1"
 pulldown-cmark = "0.9"
-markdown = "1.0.0-alpha.7"
+pulldown-cmark-to-cmark = "10"
 syn = { version = "2", features = ["parsing", "full", "extra-traits"] }
 quote = { version = "1" }
