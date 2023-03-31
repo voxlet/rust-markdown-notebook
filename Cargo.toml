@@ -1,9 +1,14 @@
 [workspace]
-members = ["core"]
+members = ["rust_markdown_notebook", "rust_markdown_notebook_wasm"]
 
 [workspace.dependencies]
 anyhow = "1"
-pulldown-cmark = "0.9"
+pulldown-cmark = { version = "0.9", features = ["serde"] }
 pulldown-cmark-to-cmark = "10"
 syn = { version = "2", features = ["parsing", "full", "extra-traits"] }
 quote = { version = "1" }
+serde = { version = "1" }
+
+wasm-bindgen = "0.2"
+ouroboros = "0.15"
+serde_json = "1"

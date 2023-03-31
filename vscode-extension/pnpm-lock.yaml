@@ -11,7 +11,11 @@ specifiers:
   eslint: ^8.34.0
   glob: ^8.1.0
   mocha: ^10.2.0
+  rust_markdown_notebook_wasm: link:../rust_markdown_notebook_wasm/pkg
   typescript: ^4.9.5
+
+dependencies:
+  rust_markdown_notebook_wasm: link:../rust_markdown_notebook_wasm/pkg
 
 devDependencies:
   '@types/glob': 8.1.0

@@ -25,20 +25,20 @@ pub enum TopLevel {
     Expr(Expr),
 }
 
-impl<'a> TryFrom<&Vec<Event<'a>>> for Code {
-    type Error = anyhow::Error;
+// impl<'a> TryFrom<&Vec<Event<'a>>> for Code {
+//     type Error = anyhow::Error;
 
-    fn try_from(events: &Vec<Event<'a>>) -> Result<Self> {
-        // TODO: make source code extraction more robust - assume it's in the 2nd event for now
-        let code_ev = events
-            .get(1)
-            .context("can't find code event in: {events:?}")?;
-        match code_ev {
-            Event::Text(CowStr::Borrowed(code_string)) => Ok(syn::parse_str(code_string)?),
-            _ => Err(anyhow!("can't find code string in: {code_ev:?}")),
-        }
-    }
-}
+//     fn try_from(events: &Vec<Event<'a>>) -> Result<Self> {
+//         // TODO: make source code extraction more robust - assume it's in the 2nd event for now
+//         let code_ev = events
+//             .get(1)
+//             .context("can't find code event in: {events:?}")?;
+//         match code_ev {
+//             Event::Text(CowStr::Borrowed(code_string)) => Ok(syn::parse_str(code_string)?),
+//             _ => Err(anyhow!("can't find code string in: {code_ev:?}")),
+//         }
+//     }
+// }
 
 fn try_parse<T: Parse>(input: &ParseStream) -> syn::Result<T> {
     let fork = input.fork();
@@ -219,16 +219,28 @@ pub mod eval {
         })
     }
 
+    fn u8s_to_string(buf: &Vec<u8>) -> String {
+        std::str::from_utf8(buf).unwrap().to_owned()
+    }
+
     pub fn eval_all_cells(notebook: &mut Notebook) -> Result<()> {
         let mut file = File(Vec::<Code>::new());
         for cell in notebook.cells.iter_mut() {
             match cell {
-                Cell::RustCode(evs) => {
-                    let events = evs.clone();
-                    let code = Code::try_from(&events)?;
+                Cell::RustCode(source) => {
+                    // let events = yaml.events.clone();
+                    // let code = Code::try_from(&events)?;
+                    let code: Code = syn::parse_str(source)?;
                     file.push(code);
-                    let output = eval_file(&file);
-                    *cell = Cell::EvaluatedRustCode(EvaluatedRustCode { events, output });
+                    let (output, compiler_message) = match eval_file(&file) {
+                        Ok(out) => (u8s_to_string(&out.stdout), u8s_to_string(&out.stderr)),
+                        Err(err) => (String::from("error"), err.to_string()),
+                    };
+                    *cell = Cell::EvaluatedRustCode(EvaluatedRustCode {
+                        source: source.to_owned(),
+                        output,
+                        compiler_message,
+                    });
                 }
                 _ => {}
             }

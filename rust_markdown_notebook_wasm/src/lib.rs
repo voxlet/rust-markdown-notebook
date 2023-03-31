@@ -1,10 +1,19 @@
-use notebook::Notebook;
+use rust_markdown_notebook::Notebook;
+use wasm_bindgen::prelude::*;
 
-mod kernel;
-mod notebook;
+#[wasm_bindgen]
+pub fn to_notebook(source: &str) -> String {
+    let notebook = Notebook::try_from(source).unwrap();
+    serde_json::to_string(&notebook).unwrap()
+}
 
-fn main() {
-    let markdown_input = r#"
+#[cfg(test)]
+mod tests {
+    use crate::to_notebook;
+
+    #[test]
+    fn can_serialize_to_notebook_data() {
+        let markdown_input = r#"
 # Title
 
 Hello world, this is a ~~complicated~~ *very simple* example.
@@ -90,8 +99,7 @@ we're done
 
 "#;
 
-    let mut notebook = Notebook::from(markdown_input);
-    kernel::eval::eval_all_cells(&mut notebook).unwrap();
-    let output = String::try_from(&notebook).unwrap();
-    println!("{}", &output);
+        let notebook = to_notebook(markdown_input);
+        println!("{notebook}");
+    }
 }

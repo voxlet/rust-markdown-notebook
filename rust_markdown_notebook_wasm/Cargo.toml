@@ -1,0 +1,13 @@
+[package]
+name = "rust_markdown_notebook_wasm"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+rust_markdown_notebook = { path = "../rust_markdown_notebook" }
+wasm-bindgen = { workspace = true }
+ouroboros = { workspace = true }
+serde_json = { workspace = true }
