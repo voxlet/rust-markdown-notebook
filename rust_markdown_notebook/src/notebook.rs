@@ -1,4 +1,4 @@
-use std::{iter, str};
+use std::str;
 
 use anyhow::Result;
 use pulldown_cmark::{CodeBlockKind, CowStr, Event, Options, Parser, Tag};

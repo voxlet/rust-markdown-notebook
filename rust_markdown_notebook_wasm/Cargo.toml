@@ -10,4 +10,8 @@ crate-type = ["cdylib"]
 rust_markdown_notebook = { path = "../rust_markdown_notebook" }
 wasm-bindgen = { workspace = true }
 ouroboros = { workspace = true }
-serde_json = { workspace = true }
+serde = { workspace = true }
+serde-wasm-bindgen = { workspace = true }
+
+[dev-dependencies]
+wasm-bindgen-test = { workspace = true }

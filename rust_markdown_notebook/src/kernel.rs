@@ -3,20 +3,35 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use anyhow::{anyhow, Context, Result};
-use pulldown_cmark::{CowStr, Event};
+use anyhow::Result;
 use quote::quote;
 use syn::{
     parse::{discouraged::Speculative, Parse, ParseStream},
     Expr, Item, Stmt,
 };
 
+#[derive(Default)]
 pub struct File(pub Vec<Code>);
+
+impl File {
+    pub fn new() -> Self {
+        File::default()
+    }
+}
 
 #[derive(Default, Debug)]
 pub struct Code {
     items: Vec<Item>,
     top_levels: Vec<TopLevel>,
+}
+
+impl TryFrom<&str> for Code {
+    type Error = anyhow::Error;
+
+    fn try_from(source: &str) -> Result<Self> {
+        let code: Code = syn::parse_str(source)?;
+        Ok(code)
+    }
 }
 
 #[derive(Debug)]
@@ -95,6 +110,48 @@ impl Parse for Code {
             panic!();
         }
         Ok(code)
+    }
+}
+
+impl Display for Code {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for item in self.items.iter() {
+            writeln!(f, "{}", quote!(#item))?;
+        }
+        if self.top_levels.is_empty() {
+            return Ok(());
+        }
+
+        let (last, but_last) = self.top_levels.split_last().unwrap();
+
+        let mut top_levels = but_last
+            .iter()
+            .map(|t| match t {
+                TopLevel::Stmt(stmt) => quote!(#stmt),
+                TopLevel::Expr(expr) => quote!(#expr;),
+            })
+            .collect::<Vec<_>>();
+
+        top_levels.push(match last {
+            TopLevel::Stmt(stmt) => quote!(#stmt),
+            TopLevel::Expr(expr) => quote!(#expr),
+        });
+
+        let eval_context = quote! {
+            fn eval_context() -> impl std::any::Any + std::fmt::Debug {
+                #(#top_levels)*
+            }
+        };
+        writeln!(f, "{eval_context}")?;
+
+        let main = quote! {
+            fn main() {
+                print!("{:#?}", eval_context())
+            }
+        };
+        writeln!(f, "{main}")?;
+
+        Ok(())
     }
 }
 
@@ -219,18 +276,16 @@ pub mod eval {
         })
     }
 
-    fn u8s_to_string(buf: &Vec<u8>) -> String {
+    pub fn u8s_to_string(buf: &Vec<u8>) -> String {
         std::str::from_utf8(buf).unwrap().to_owned()
     }
 
     pub fn eval_all_cells(notebook: &mut Notebook) -> Result<()> {
-        let mut file = File(Vec::<Code>::new());
+        let mut file = File::new();
         for cell in notebook.cells.iter_mut() {
             match cell {
                 Cell::RustCode(source) => {
-                    // let events = yaml.events.clone();
-                    // let code = Code::try_from(&events)?;
-                    let code: Code = syn::parse_str(source)?;
+                    let code = Code::try_from(source.as_ref())?;
                     file.push(code);
                     let (output, compiler_message) = match eval_file(&file) {
                         Ok(out) => (u8s_to_string(&out.stdout), u8s_to_string(&out.stderr)),
