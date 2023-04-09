@@ -1,0 +1,3 @@
+packages:
+  - vscode-extension
+  - rust_markdown_notebook_wasm

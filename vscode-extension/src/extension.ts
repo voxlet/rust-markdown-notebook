@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import * as wasm from "rust_markdown_notebook_wasm";
+import * as wasm from "rust-markdown-notebook";
 
 const providerOptions = {} satisfies vscode.NotebookDocumentContentOptions;
 

@@ -1,0 +1,9 @@
+{
+  "name": "@rust-markdown-notebook/wasm-src",
+  "files": [],
+  "scripts": {
+    "build": "pnpm run compile && pnpm run rename",
+    "compile": "wasm-pack build --out-name index --target nodejs",
+    "rename": "sed -i '' 's|rust_markdown_notebook_wasm|rust-markdown-notebook|g' pkg/package.json"
+  }
+}

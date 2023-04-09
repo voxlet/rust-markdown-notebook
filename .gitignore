@@ -1,7 +1,8 @@
+.turbo/
 target/
-
-out
-dist
-node_modules
+pkg/
+out/
+dist/
+node_modules/
 .vscode-test/
 *.vsix

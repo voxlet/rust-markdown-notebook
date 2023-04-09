@@ -4,13 +4,13 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"type": "npm",
-			"script": "watch",
-			"problemMatcher": "$tsc-watch",
-			"isBackground": true,
-			"presentation": {
-				"reveal": "never"
-			},
+			"label": "Build",
+			"type": "shell",
+			"command": "npx turbo run build",
+			// "problemMatcher": "$tsc-watch",
+			// "presentation": {
+			// 	"reveal": "never"
+			// },
 			"group": {
 				"kind": "build",
 				"isDefault": true
